@@ -2,22 +2,12 @@ using ACSCaller;
 using ACSCaller.Akka;
 using ACSCaller.Models;
 using ACSCaller.Orleans;
+using Akka.Actor;
+using Akka.Hosting;
 using Azure.Communication.CallAutomation;
 using Azure.Messaging;
 
 var builder = WebApplication.CreateBuilder(args);
-
-builder.AddServiceDefaults();
-builder.Services.AddEndpointsApiExplorer();
-
-builder.UseOrleans(builder =>
-{
-    builder.UseLocalhostClustering();
-    builder.UseDashboard();
-});
-
-builder.Services.AddSingleton<IActorBridge, AkkaService>();
-builder.Services.AddHostedService<AkkaService>(sp => (AkkaService)sp.GetRequiredService<IActorBridge>());
 
 // Your ACS resource connection string
 var acsConnectionString = builder.Configuration.GetConnectionString("acs");
@@ -26,16 +16,35 @@ var acsPhonenumber = builder.Configuration.GetValue<string>("acsPhonenumber")!;
 var callbackUriHost = builder.Configuration.GetValue<string>("acsCallbackUrl")!; //comes from aspire or appsettings.json
 var cognitiveServiceEndpoint = builder.Configuration.GetValue<string>("cognitiveServicesEndpoint")!;
 
-builder.Services.AddSingleton(new CallAutomationClient(acsConnectionString));
-
 var akkaCallConfiguration = new CallConfiguration { CallbackUri = new Uri($"{callbackUriHost}/api/Callback-akka"), CallerPhoneNumber = acsPhonenumber, CognitiveServiceEndpoint = cognitiveServiceEndpoint };
 var orleansCallConfiguration = new CallConfiguration { CallbackUri = new Uri($"{callbackUriHost}/api/Callback-orleans"), CallerPhoneNumber = acsPhonenumber, CognitiveServiceEndpoint = cognitiveServiceEndpoint };
 
+builder.Services.AddEndpointsApiExplorer();
+
+builder.UseOrleans(builder =>
+{
+    builder.UseLocalhostClustering();
+    builder.UseDashboard();
+});
+
+builder.Services.AddAkka("acs", builder =>
+{
+    builder.WithActors((system, registry, resolver) =>
+    {
+        var callAutomationClient = resolver.GetService<CallAutomationClient>();
+
+        var parent = system.ActorOf(Props.Create(() => new CallCoordinatorActor(callAutomationClient, akkaCallConfiguration)));
+        
+        registry.Register<CallCoordinatorActor>(parent);
+    });
+});
+
+builder.Services.AddSingleton(new CallAutomationClient(acsConnectionString));
+
 var app = builder.Build();
-app.MapDefaultEndpoints();
 
 
-app.MapPost("/initiate-outboundcall-akka", async (StartCallRequest request, IActorBridge bridge) =>
+app.MapPost("/initiate-outboundcall-akka", (StartCallRequest request, IRequiredActor<CallCoordinatorActor> callCoordinator) =>
 {
     var instance = new CallDetails
     {
@@ -43,8 +52,7 @@ app.MapPost("/initiate-outboundcall-akka", async (StartCallRequest request, IAct
         Id = Guid.NewGuid()
     };
 
-    await bridge.StartCall(instance, akkaCallConfiguration);
-
+    callCoordinator.ActorRef.Tell(new CallCoordinatorActor.StartNewCall(instance));
 
     return Results.Ok();
 });
@@ -104,21 +112,52 @@ app.MapPost("/api/callback-orleans", async (CloudEvent[] cloudEvents, IGrainFact
     return Results.Ok();
 });
 
-app.MapPost("/api/callback-akka", async (CloudEvent[] cloudEvents, IActorBridge bridge) =>
+app.MapPost("/api/callback-akka", (CloudEvent[] cloudEvents, IRequiredActor<CallCoordinatorActor> callCoordinator) =>
 {
     foreach (var cloudEvent in cloudEvents)
     {
         var evnt = CallAutomationEventParser.Parse(cloudEvent);
 
 
-        if (evnt == null)
+        if (evnt == null || string.IsNullOrWhiteSpace(evnt.OperationContext))
         {
             // ???
 
             return Results.Ok();
         }
 
-        await bridge.ProcessEvent(evnt);
+
+        var id = evnt.OperationContext;
+
+        if (evnt is CallConnected)
+        {
+            callCoordinator.ActorRef.Tell(new FavouriteThingsCallActor.CallConnected() { Id = id });
+        }
+        if (evnt is CallDisconnected)
+        {
+            callCoordinator.ActorRef.Tell(new FavouriteThingsCallActor.CallDisconnected() { Id = id });
+        }
+        if (evnt is RecognizeCompleted recognizeCompleted)
+        {
+            var result = recognizeCompleted.RecognizeResult is DtmfResult dtmfResult;
+
+            if (result)
+            {
+                var inputFromPhone = (recognizeCompleted.RecognizeResult as DtmfResult)!;
+                callCoordinator.ActorRef.Tell(new FavouriteThingsCallActor.RecognizeCompleted() { Result = inputFromPhone, Id = id });
+            }
+        }
+        if (evnt is PlayCompleted playCompleted)
+        {
+            callCoordinator.ActorRef.Tell(new FavouriteThingsCallActor.PlayFinished() { Id = id });
+        }
+        if (evnt is RecognizeFailed failed)
+        {
+            callCoordinator.ActorRef.Tell(new FavouriteThingsCallActor.RecognizeFailed() { Id = id });
+        }
+
+
+
     }
     return Results.Ok();
 });

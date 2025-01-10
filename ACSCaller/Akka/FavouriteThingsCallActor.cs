@@ -8,13 +8,18 @@ namespace ACSCaller.Akka;
 
 public class FavouriteThingsCallActor : ReceiveActor
 {
+    public class BaseACSEvent
+    {
+        public required string Id { get; set; }
+    }
+
     public class StartCall { }
-    public class CallConnected { }
-    public class CallDisconnected { }
-    public class RecognizeCompleted { public DtmfResult Result { get; set; } }
-    public class RecognizeFailed { }
+    public class CallConnected : BaseACSEvent {}
+    public class CallDisconnected : BaseACSEvent { }
+    public class RecognizeCompleted : BaseACSEvent { public DtmfResult Result { get; set; } }
+    public class RecognizeFailed : BaseACSEvent { }
     public class RecognizeFailedThreeTimes { }
-    public class PlayFinished { }
+    public class PlayFinished : BaseACSEvent { }
 
     private readonly ILoggingAdapter _logger = Context.GetLogger();
     private readonly CallConfiguration _callConfiguration;

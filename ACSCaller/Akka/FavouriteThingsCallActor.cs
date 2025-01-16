@@ -8,18 +8,18 @@ namespace ACSCaller.Akka;
 
 public class FavouriteThingsCallActor : ReceiveActor
 {
-    public class BaseACSEvent
+    public record BaseACSEvent
     {
         public required string Id { get; set; }
     }
 
-    public class StartCall { }
-    public class CallConnected : BaseACSEvent {}
-    public class CallDisconnected : BaseACSEvent { }
-    public class RecognizeCompleted : BaseACSEvent { public DtmfResult Result { get; set; } }
-    public class RecognizeFailed : BaseACSEvent { }
-    public class RecognizeFailedThreeTimes { }
-    public class PlayFinished : BaseACSEvent { }
+    public record StartCall { }
+    public record CallConnected : BaseACSEvent {}
+    public record CallDisconnected : BaseACSEvent { }
+    public record RecognizeCompleted : BaseACSEvent { public required DtmfResult Result { get; set; } }
+    public record RecognizeFailed : BaseACSEvent { }
+    public record RecognizeFailedThreeTimes { }
+    public record PlayFinished : BaseACSEvent { }
 
     private readonly ILoggingAdapter _logger = Context.GetLogger();
     private readonly CallConfiguration _callConfiguration;

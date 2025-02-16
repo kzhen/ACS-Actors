@@ -4,6 +4,8 @@ This project demonstrates to model automated call workflows on Azure Communicati
 
 This project explores two popular actor frameworks, Akka.NET and Microsoft Orleans, to implement the workflow logic.
 
+Read the blog post that goes along with this repository - https://www.unravelled.dev/akka-and-microsoft-orleans-a-good-fit-for-programmable-voice/
+
 ## Running the solution
 
 To run the solution you will need:

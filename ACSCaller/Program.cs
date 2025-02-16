@@ -57,7 +57,7 @@ app.MapPost("/initiate-outboundcall-akka", (StartCallRequest request, IRequiredA
     return Results.Ok();
 });
 
-app.MapPost("/initiate-outboundcall-orleans", async (string magicString, StartCallRequest request, IGrainFactory factory) =>
+app.MapPost("/initiate-outboundcall-orleans", async (StartCallRequest request, IGrainFactory factory) =>
 {
     var instance = new CallDetails
     {

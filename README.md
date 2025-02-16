@@ -18,6 +18,7 @@ Update the `appsettings.json` with the following values
 "ConnectionStrings": {
   "acs": "<connection string for your ACS resource>"
 },
+"cognitiveServicesEndpoint": "<cognitive services endpoint>",
 "acsPhonenumber": "<acs phone number that you have purchased>",
 "acsCallbackUrl": "<the ngrok tunnel url>"
 ```
